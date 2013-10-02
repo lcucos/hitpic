@@ -57,7 +57,35 @@ int16_t gx, gy, gz;
 #define LED_PIN 13
 bool blinkState = false;
 
+//===================== common processing ======================
+#define SAMPLE_SIZE         180
+#define BEFORE_SIZE          20
+#define BUFFER_SIZE      (SAMPLE_SIZE+BEFORE_SIZE)
+
+int prevX=0;
+int prevY=0;
+int prevZ=0;
+
+int dH=50;
+int dL=-50;
+
+struct SensVals{
+  int ax;
+  int ay;
+  int az;
+};
+
+int circ_buff_crtpos = -1;
+int hit_stamp = -1;
+int after_hit_samples = 1;
+
+unsigned long lastTime   = 0;
+unsigned long hit_time = 0; // when the event was first recorded
+
+SensVals circ_buff_storage[BUFFER_SIZE];
 SoftwareSerial blueToothSerial(RxD,TxD);
+//===================================================================
+
 
 void setup() {
     // join I2C bus (I2Cdev library doesn't do this automatically)
@@ -84,6 +112,8 @@ void setup() {
   pinMode(TxD, OUTPUT);
   setupBlueToothConnection();
 }
+
+//================== common ==================================
 void setupBlueToothConnection()
 {
   blueToothSerial.begin(9600); //Set BluetoothBee BaudRate to default baud rate 38400
@@ -99,6 +129,49 @@ void setupBlueToothConnection()
   blueToothSerial.println("Bluetooth Started");
   blueToothSerial.flush();
 }
+void streamData(int pos, int index){
+      String outStr = String(pos);
+      outStr += ",";
+      outStr += circ_buff_storage[index].ax;
+      outStr += ",";    
+      outStr += circ_buff_storage[index].ay;
+      outStr += ","; 
+      outStr += circ_buff_storage[index].az;
+      outStr += "\n";
+      Serial.print(outStr);
+      blueToothSerial.print(outStr);
+}
+
+void streemHitData(){
+     unsigned long stop_time=millis();
+     
+     // we go back in time SAMPLE_SIZE samples before the hit and SAMPLE_SIZE after the hit
+     int startStamp = (hit_stamp + SAMPLE_SIZE+1) % BUFFER_SIZE;
+     String header=String("StartAt=");
+     header+=hit_time;
+     header+=", Duration=";
+     header+=(int)(stop_time-hit_time); 
+     header+=", HitIndex=";
+     header+=(BEFORE_SIZE-1);
+     header+="\n";
+     Serial.print(header);
+     blueToothSerial.print(header);
+   
+     for(int i=0;i<BUFFER_SIZE;i++){
+        int pos = (i + startStamp) % BUFFER_SIZE;
+        streamData(i, pos);
+     }
+}  
+
+void storeData(int dX, int dY, int dZ){
+   circ_buff_crtpos++;
+   if(circ_buff_crtpos == BUFFER_SIZE){
+       circ_buff_crtpos=0;
+   }
+   circ_buff_storage[circ_buff_crtpos].ax = dX;
+   circ_buff_storage[circ_buff_crtpos].ay = dY;
+   circ_buff_storage[circ_buff_crtpos].az = dZ;
+}
 
 void loop() {
     // read raw accel/gyro measurements from device
@@ -107,7 +180,7 @@ void loop() {
     // these methods (and a few others) are also available
     //accelgyro.getAcceleration(&ax, &ay, &az);
     //accelgyro.getRotation(&gx, &gy, &gz);
-
+/*
     // display tab-separated accel/gyro x/y/z values
     Serial.print("a/g:\t");
     Serial.print(ax); Serial.print("\t");
@@ -120,8 +193,32 @@ void loop() {
     dataStr+=ax;
     dataStr+="\n";
     blueToothSerial.print(dataStr);
+*/
+    int newX=ax;
+    int newY=ay;
+    int newZ=az;
+    int dX = prevX-newX;
+    int dY = prevY-newY;
+    int dZ = prevZ-newZ;
+    prevX=newX;
+    prevY=newY;
+    prevZ=newZ;
+    storeData(newX, newY, newZ);
+    // see if is time to send the data
+    if(hit_stamp >= 0 && after_hit_samples++ >= SAMPLE_SIZE){
+       // save data
+       streemHitData();
+       hit_stamp=-1;
+    }
+    if( dX>dH || dX < dL || dY>dH || dY < dL || dZ>dH || dZ < dL) {
+      if(hit_stamp == -1){
+         hit_stamp = circ_buff_crtpos;
+         hit_time=millis();
+         after_hit_samples=1;
+      }
+    }
     
     // blink LED to indicate activity
-    blinkState = !blinkState;
-    digitalWrite(LED_PIN, blinkState);
+    //blinkState = !blinkState;
+    //digitalWrite(LED_PIN, blinkState);
 }

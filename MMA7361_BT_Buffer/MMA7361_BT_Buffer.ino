@@ -1,21 +1,13 @@
-
 #include <SoftwareSerial.h>   //Software Serial Port
+//#include <BaseCollect.h>
 
-#define SAMPLE_SIZE         180
-#define BEFORE_SIZE          20
-#define BUFFER_SIZE      (SAMPLE_SIZE+BEFORE_SIZE)
 
 #define RxD 6
 #define TxD 7
  
 #define DEBUG_ENABLED  1
 
-struct SensVals{
-  int ax;
-  int ay;
-  int az;
-};
-
+    
 int sleepPin= 4; // Turning sleep high turns on the Accelerometer
 int sixGPin = 3; // set this pin to high for 6G
 
@@ -23,12 +15,23 @@ int xpin = A0;
 int ypin = A1;
 int zpin = A2;
 
+//===================== common processing ======================
+#define SAMPLE_SIZE         180
+#define BEFORE_SIZE          20
+#define BUFFER_SIZE      (SAMPLE_SIZE+BEFORE_SIZE)
+
 int prevX=0;
 int prevY=0;
 int prevZ=0;
 
 int dH=50;
 int dL=-50;
+
+struct SensVals{
+  int ax;
+  int ay;
+  int az;
+};
 
 int circ_buff_crtpos = -1;
 int hit_stamp = -1;
@@ -38,8 +41,8 @@ unsigned long lastTime   = 0;
 unsigned long hit_time = 0; // when the event was first recorded
 
 SensVals circ_buff_storage[BUFFER_SIZE];
-
 SoftwareSerial blueToothSerial(RxD,TxD);
+//===================================================================
 
 
 void setup()
@@ -66,7 +69,7 @@ void setup()
   pinMode(TxD, OUTPUT);
   setupBlueToothConnection();
 }
-
+//================== common ==================================
 void setupBlueToothConnection()
 {
   blueToothSerial.begin(9600); //Set BluetoothBee BaudRate to default baud rate 38400
@@ -126,6 +129,7 @@ void storeData(int dX, int dY, int dZ){
    circ_buff_storage[circ_buff_crtpos].ay = dY;
    circ_buff_storage[circ_buff_crtpos].az = dZ;
 }
+//================== 
 
 void loop()
 {
